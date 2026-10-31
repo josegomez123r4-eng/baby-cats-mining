@@ -66,7 +66,7 @@ button,select{font:inherit}.wrap{max-width:1200px;margin:auto;padding:18px}
 
 <footer class="foot">Baby Cats Mineverse · $BABY · <span data-i18n="footer">Mine points. Grow together.</span><br><br><span data-i18n="disclaimer">Preview interface. Wallet, mining and points will activate after secure backend integration.</span></footer>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 const translations={
 es:{connect:"CONECTAR WALLET",home:"⌂ Inicio",mining:"⛏ Minería",leader:"🏆 Clasificación",rewards:"🎁 Recompensas",collection:"🐾 Colección NFT",welcome:"BIENVENIDO A MINEVERSE",mine:"MINA",points:"PUNTOS",earn:"GANA RECOMPENSAS",heroText:"Tu Baby Cat te acompaña. Completa sesiones de minería y acumula puntos.",yourNfts:"TUS BABY CATS NFT",connectSee:"Conecta tu wallet para consultar tus NFT.",pointsBalance:"TUS PUNTOS",pointsNote:"Tus puntos no caducan.",dashboard:"⛏ Panel de minería",nftsOwned:"NFT EN PROPIEDAD",claimed:"PUNTOS RECLAMADOS",pending:"PUNTOS PENDIENTES",status:"ESTADO DE MINERÍA",inactive:"Inactiva",catMiner:"TU BABY CAT MINERO",catDesc:"Tu compañero de minería está listo para la aventura.",rate:"15 PUNTOS / NFT / 8 HORAS",nextClaim:"SIGUIENTE RECLAMO EN",start:"INICIAR MINERÍA · PRÓXIMAMENTE",timerNote:"La minería se detiene al completar 8 horas. Reclama tus puntos para iniciar el siguiente ciclo.",leaderTitle:"🏆 TOP 50 MINEROS",leaderDesc:"Los 50 usuarios con más puntos aparecerán aquí cuando el sistema esté conectado.",wallet:"WALLET",pointsCol:"PUNTOS",coming:"Clasificación próximamente",join:"🐾 ÚNETE A LA FAMILIA BABY CATS",joinText:"Consigue tu NFT Baby Cats y prepárate para formar parte de la minería.",buy:"EXPLORAR BABY CATS EN OPENSEA ↗",footer:"Mina puntos. Crezcamos juntos.",disclaimer:"Interfaz de vista previa. Wallet, minería y puntos se activarán tras integrar el backend seguro."},
@@ -99,18 +99,29 @@ let saved='es';try{saved=localStorage.getItem('babycats-language')||'es'}catch(e
 // Baby Cats wallet + read-only NFT verification (Base mainnet).
 const BABY_SUPABASE_URL = "https://sraeejufwxaefhxkwydv.supabase.co";
 const BABY_SUPABASE_KEY = "sb_publishable_JatP5ha3cvca3n6bwsCyyQ_jyD4Qmgd";
-const babySupabase = window.supabase.createClient(BABY_SUPABASE_URL, BABY_SUPABASE_KEY);
+const supabaseSdk = window.supabase;
 const connectWalletBtn = document.getElementById("connectWalletBtn");
 const walletStatusEl = document.getElementById("walletStatus");
 const heroNftCountEl = document.getElementById("heroNftCount");
 const dashboardNftCountEl = document.getElementById("dashboardNftCount");
-
+let babySupabase = null;
+if (supabaseSdk && typeof supabaseSdk.createClient === "function") {
+  babySupabase = supabaseSdk.createClient(BABY_SUPABASE_URL, BABY_SUPABASE_KEY);
+} else {
+  console.error("Supabase browser SDK did not load.");
+  if (walletStatusEl) walletStatusEl.textContent = "No se pudo cargar el sistema de conexión. Recarga la página.";
+}
 function setWalletStatus(message) {
   if (walletStatusEl) walletStatusEl.textContent = message;
 }
 async function verifyBabyCatsWallet() {
-  if (!window.ethereum) {
-    setWalletStatus("Open this page inside MetaMask, Trust Wallet, or another EVM wallet browser.");
+  if (!babySupabase) {
+    setWalletStatus("No se pudo cargar Supabase. Recarga la página e inténtalo de nuevo.");
+    return;
+  }
+  const provider = window.ethereum;
+  if (!provider || typeof provider.request !== "function") {
+    setWalletStatus("Abre esta página desde el navegador interno de MetaMask o Trust Wallet para conectar tu wallet.");
     return;
   }
   connectWalletBtn.disabled = true;
@@ -120,7 +131,8 @@ async function verifyBabyCatsWallet() {
   try {
     const { data: authData, error: authError } = await babySupabase.auth.signInWithWeb3({
       chain: "ethereum",
-      statement: "Sign in to Baby Cats Mining to verify NFT ownership. No transaction or token approval is requested."
+      statement: "Sign in to Baby Cats Mining to verify NFT ownership. No transaction or token approval is requested.",
+      wallet: provider
     });
     if (authError) throw authError;
     if (!authData.session) throw new Error("Wallet sign-in did not create a session.");
@@ -147,6 +159,17 @@ async function verifyBabyCatsWallet() {
     connectWalletBtn.disabled = false;
   }
 }
-connectWalletBtn?.addEventListener("click", verifyBabyCatsWallet);
+if (connectWalletBtn) {
+  connectWalletBtn.addEventListener("click", (event) => {
+    event.preventDefault();
+    verifyBabyCatsWallet().catch((error) => {
+      console.error("Unexpected wallet connection error:", error);
+      setWalletStatus(error?.message || "Error inesperado al conectar la wallet.");
+      connectWalletBtn.disabled = false;
+    });
+  });
+} else {
+  console.error("Connect wallet button was not found in the page.");
+}
 
 </script></body></html>
