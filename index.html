@@ -164,7 +164,20 @@ async function connectBabyCatsWallet(provider, walletName) {
       setWalletStatus("La cuenta cambió. Vuelve a conectar para verificar los NFT.");
       babySupabase.auth.signOut().catch(() => {});
     });
-    provider.on?.("disconnect", () => {
+    return true;
+  } catch (error) {
+    console.error("Baby Cats wallet verification failed:", error);
+    const message = error?.message || "Could not connect or verify this wallet.";
+    setWalletStatus(message);
+    connectWalletBtn.textContent = originalLabel;
+    return false;
+  } finally {
+    walletConnectBusy = false;
+    connectWalletBtn.disabled = false;
+  }
+}
+
+
       activeWalletProvider = null;
       connectWalletBtn.textContent = "CONECTAR WALLET";
       heroNftCountEl.textContent = "—";
@@ -185,9 +198,9 @@ async function connectBabyCatsWallet(provider, walletName) {
 window.babyCatsOnConnected = (provider, address) => {
   if (!provider || typeof provider.request !== "function" || !address) {
     setWalletStatus("Reown no pudo entregar un proveedor EVM válido.");
-    return;
+    return false;
   }
-  connectBabyCatsWallet(provider, "Reown AppKit");
+  return connectBabyCatsWallet(provider, "Reown AppKit");
 };
 window.babyCatsOnDisconnected = () => {
   activeWalletProvider = null;
