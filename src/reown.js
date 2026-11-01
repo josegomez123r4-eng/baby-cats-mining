@@ -44,6 +44,7 @@ async function connectSelectedAccount() {
   if (!accountState?.isConnected || !accountState?.address || !eip155Provider) return
   const address = accountState.address.toLowerCase()
   if (connectingAddress === address || switchInProgress) return
+  connectingAddress = address
 
   try {
     const chainHex = await eip155Provider.request({ method: 'eth_chainId' })
@@ -65,9 +66,11 @@ async function connectSelectedAccount() {
 
     connectingAddress = address
     if (typeof window.babyCatsOnConnected === 'function') {
-      await window.babyCatsOnConnected(eip155Provider, address)
+      const verified = await window.babyCatsOnConnected(eip155Provider, address)
+      if (verified !== true) connectingAddress = null
     }
   } catch (error) {
+    connectingAddress = null
     console.error('Reown AppKit connection error:', error)
     status(error?.message || 'No se pudo conectar con Reown AppKit.')
   } finally {
