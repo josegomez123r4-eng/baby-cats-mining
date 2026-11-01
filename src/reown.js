@@ -31,7 +31,6 @@ const appKit = createAppKit({
 
 let eip155Provider = null
 let accountState = null
-let networkState = null
 let connectingAddress = null
 let switchInProgress = false
 
@@ -59,6 +58,7 @@ async function connectSelectedAccount() {
         16
       )
       if (confirmedChain !== base.id) {
+        connectingAddress = null
         status('Selecciona la red Base en tu wallet para continuar.')
         return
       }
@@ -97,7 +97,6 @@ appKit.subscribeAccount(state => {
 })
 
 appKit.subscribeNetwork(state => {
-  networkState = state
   if (accountState?.isConnected && state?.chainId === base.id) {
     void connectSelectedAccount()
   }
@@ -110,7 +109,6 @@ window.addEventListener('beforeunload', () => {
   // Do not disconnect the wallet on page close; only release local references.
   eip155Provider = null
   accountState = null
-  networkState = null
 })
 
 console.info('Baby Cats Reown AppKit initialized for Base.')
