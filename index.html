@@ -182,6 +182,22 @@ async function connectBabyCatsWallet(provider, walletName) {
   }
 }
 
+window.babyCatsOnConnected = (provider, address) => {
+  if (!provider || typeof provider.request !== "function" || !address) {
+    setWalletStatus("Reown no pudo entregar un proveedor EVM válido.");
+    return;
+  }
+  connectBabyCatsWallet(provider, "Reown AppKit");
+};
+window.babyCatsOnDisconnected = () => {
+  activeWalletProvider = null;
+  if (connectWalletBtn) connectWalletBtn.textContent = "CONECTAR WALLET";
+  if (heroNftCountEl) heroNftCountEl.textContent = "—";
+  if (dashboardNftCountEl) dashboardNftCountEl.textContent = "—";
+  setWalletStatus("Wallet desconectada. Conecta de nuevo para verificar tus Baby Cats.");
+  if (babySupabase) babySupabase.auth.signOut().catch(() => {});
+};
+
 if (connectWalletBtn) {
   connectWalletBtn.addEventListener("click", event => {
     event.preventDefault();
