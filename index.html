@@ -114,59 +114,163 @@ if (supabaseSdk && typeof supabaseSdk.createClient === "function") {
 function setWalletStatus(message) {
   if (walletStatusEl) walletStatusEl.textContent = message;
 }
-async function verifyBabyCatsWallet() {
+// EIP-6963 discovery: let users choose the exact injected wallet instead of
+// relying on window.ethereum, which may point to a different extension.
+const discoveredBabyWallets = new Map();
+let walletPicker = null;
+let activeWalletProvider = null;
+let walletConnectBusy = false;
+
+function announceBabyWallet(event) {
+  const detail = event && event.detail;
+  if (!detail || !detail.info || !detail.provider || typeof detail.provider.request !== "function") return;
+  const info = detail.info;
+  const key = info.uuid || info.rdns || info.name;
+  if (!key) return;
+  discoveredBabyWallets.set(key, { info, provider: detail.provider });
+}
+
+window.addEventListener("eip6963:announceProvider", announceBabyWallet);
+window.dispatchEvent(new Event("eip6963:requestProvider"));
+
+function getBabyWalletOptions() {
+  const options = Array.from(discoveredBabyWallets.values());
+  if (!options.length && window.ethereum && typeof window.ethereum.request === "function") {
+    options.push({ info: { name: "Browser wallet", icon: "", rdns: "legacy.injected" }, provider: window.ethereum });
+  }
+  return options;
+}
+
+function closeBabyWalletPicker() {
+  if (walletPicker) {
+    walletPicker.remove();
+    walletPicker = null;
+  }
+}
+
+function chooseBabyWallet(option) {
+  closeBabyWalletPicker();
+  connectBabyCatsWallet(option.provider, option.info.name || "Wallet");
+}
+
+function showBabyWalletPicker() {
+  const options = getBabyWalletOptions();
+  if (!options.length) {
+    setWalletStatus("No se detectaron wallets EVM. Abre la página en un navegador con MetaMask, Trust Wallet u otra wallet compatible.");
+    return;
+  }
+  closeBabyWalletPicker();
+  const overlay = document.createElement("div");
+  overlay.setAttribute("role", "presentation");
+  overlay.style.cssText = "position:fixed;inset:0;z-index:99999;background:#050510dd;display:flex;align-items:center;justify-content:center;padding:18px";
+  const panel = document.createElement("div");
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-modal", "true");
+  panel.setAttribute("aria-labelledby", "baby-wallet-title");
+  panel.style.cssText = "width:min(100%,420px);max-height:85vh;overflow:auto;background:#15132b;border:1px solid #8060ad;border-radius:18px;padding:20px;color:#fff;box-shadow:0 20px 70px #000b;font-family:inherit";
+  const title = document.createElement("h2");
+  title.id = "baby-wallet-title";
+  title.textContent = "Choose your wallet";
+  title.style.cssText = "margin:0 0 8px;font-size:21px";
+  const note = document.createElement("p");
+  note.textContent = "Select a wallet. Baby Cats only requests a sign-in message; it never asks for a transaction or token approval.";
+  note.style.cssText = "color:#c4bfdc;font-size:13px;line-height:1.5;margin:0 0 16px";
+  panel.append(title, note);
+  options.forEach(option => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.style.cssText = "width:100%;display:flex;align-items:center;gap:12px;text-align:left;margin:8px 0;padding:12px;border:1px solid #51436f;border-radius:12px;background:#211d3a;color:#fff;font:inherit;cursor:pointer";
+    if (option.info.icon && /^(https:\/\/|data:image\/)/i.test(option.info.icon)) {
+      const img = document.createElement("img");
+      img.src = option.info.icon;
+      img.alt = "";
+      img.width = 30;
+      img.height = 30;
+      img.style.cssText = "object-fit:contain;border-radius:7px";
+      button.appendChild(img);
+    }
+    const label = document.createElement("span");
+    label.textContent = option.info.name || "Wallet";
+    label.style.fontWeight = "800";
+    button.appendChild(label);
+    button.addEventListener("click", () => chooseBabyWallet(option));
+    panel.appendChild(button);
+  });
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.textContent = "Cancel";
+  cancel.style.cssText = "width:100%;padding:11px;border:0;border-radius:10px;background:#38304f;color:#fff;font:inherit;margin-top:8px";
+  cancel.addEventListener("click", closeBabyWalletPicker);
+  panel.appendChild(cancel);
+  overlay.addEventListener("click", event => { if (event.target === overlay) closeBabyWalletPicker(); });
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+  walletPicker = overlay;
+}
+
+async function connectBabyCatsWallet(provider, walletName) {
   if (!babySupabase) {
     setWalletStatus("No se pudo cargar Supabase. Recarga la página e inténtalo de nuevo.");
     return;
   }
-  const provider = window.ethereum;
-  if (!provider || typeof provider.request !== "function") {
-    setWalletStatus("Abre esta página desde el navegador interno de MetaMask o Trust Wallet para conectar tu wallet.");
-    return;
-  }
+  if (walletConnectBusy) return;
+  walletConnectBusy = true;
   connectWalletBtn.disabled = true;
   const originalLabel = connectWalletBtn.textContent;
   connectWalletBtn.textContent = "CONNECTING...";
-  setWalletStatus("Approve the secure wallet sign-in request in your wallet.");
+  setWalletStatus("Confirma la conexión y el mensaje de inicio de sesión en tu wallet.");
   try {
+    const accounts = await provider.request({ method: "eth_requestAccounts" });
+    if (!Array.isArray(accounts) || !accounts[0]) throw new Error("La wallet no devolvió una dirección.");
     const { data: authData, error: authError } = await babySupabase.auth.signInWithWeb3({
       chain: "ethereum",
       statement: "Sign in to Baby Cats Mining to verify NFT ownership. No transaction or token approval is requested.",
       wallet: provider
     });
     if (authError) throw authError;
-    if (!authData.session) throw new Error("Wallet sign-in did not create a session.");
-
-    setWalletStatus("Wallet authenticated. Checking Baby Cats NFTs on Base...");
-    const { data, error } = await babySupabase.functions.invoke("verify-baby-cats", {
-      body: {}
-    });
+    if (!authData.session) throw new Error("No se pudo crear la sesión Web3.");
+    const { data, error } = await babySupabase.functions.invoke("verify-baby-cats", { body: {} });
     if (error) throw error;
-    if (!data || data.verified !== true) throw new Error("NFT verification did not return a valid result.");
-
+    if (!data || data.verified !== true || !Number.isInteger(data.nftCount)) {
+      throw new Error("No se pudo confirmar la propiedad de los NFT.");
+    }
+    activeWalletProvider = provider;
     heroNftCountEl.textContent = String(data.nftCount);
     dashboardNftCountEl.textContent = String(data.nftCount);
-    setWalletStatus(data.wallet.slice(0, 6) + "..." + data.wallet.slice(-4) +
-      " · " + data.nftCount + " Baby Cats verified · " + data.pointsPerCycle +
-      " points per 8-hour cycle");
-    connectWalletBtn.textContent = data.wallet.slice(0, 6) + "..." + data.wallet.slice(-4);
+    const shortAddress = data.wallet.slice(0, 6) + "..." + data.wallet.slice(-4);
+    setWalletStatus(walletName + " · " + shortAddress + " · " + data.nftCount +
+      " Baby Cats verificados · " + data.pointsPerCycle + " puntos por ciclo de 8 horas.");
+    connectWalletBtn.textContent = shortAddress;
+    provider.on?.("accountsChanged", () => {
+      activeWalletProvider = null;
+      connectWalletBtn.textContent = "CONECTAR WALLET";
+      heroNftCountEl.textContent = "—";
+      dashboardNftCountEl.textContent = "—";
+      setWalletStatus("La cuenta cambió. Vuelve a conectar para verificar los NFT.");
+      babySupabase.auth.signOut().catch(() => {});
+    });
+    provider.on?.("disconnect", () => {
+      activeWalletProvider = null;
+      connectWalletBtn.textContent = "CONECTAR WALLET";
+      heroNftCountEl.textContent = "—";
+      dashboardNftCountEl.textContent = "—";
+      setWalletStatus("Wallet desconectada.");
+      babySupabase.auth.signOut().catch(() => {});
+    });
   } catch (error) {
     console.error("Baby Cats wallet verification failed:", error);
-    const message = error?.message || "Could not connect or verify this wallet.";
-    setWalletStatus(message);
+    setWalletStatus(error?.message || "No se pudo conectar o verificar esta wallet.");
     connectWalletBtn.textContent = originalLabel;
   } finally {
+    walletConnectBusy = false;
     connectWalletBtn.disabled = false;
   }
 }
+
 if (connectWalletBtn) {
-  connectWalletBtn.addEventListener("click", (event) => {
+  connectWalletBtn.addEventListener("click", event => {
     event.preventDefault();
-    verifyBabyCatsWallet().catch((error) => {
-      console.error("Unexpected wallet connection error:", error);
-      setWalletStatus(error?.message || "Error inesperado al conectar la wallet.");
-      connectWalletBtn.disabled = false;
-    });
+    showBabyWalletPicker();
   });
 } else {
   console.error("Connect wallet button was not found in the page.");
