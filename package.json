@@ -1,0 +1,23 @@
+{
+  "name": "baby-cats-mining",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@reown/appkit": "1.8.24",
+    "@reown/appkit-adapter-ethers": "1.8.24",
+    "@supabase/supabase-js": "2.118.0",
+    "ethers": "6.13.2"
+  },
+  "devDependencies": {
+    "vite": "7.2.7"
+  }
+}
