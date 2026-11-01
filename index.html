@@ -126,17 +126,20 @@ function showBabyWalletPicker() {
 async function connectBabyCatsWallet(provider, walletName) {
   if (!babySupabase) {
     setWalletStatus("No se pudo cargar Supabase. Recarga la página e inténtalo de nuevo.");
-    return;
+    return false;
   }
-  if (walletConnectBusy) return;
+  if (walletConnectBusy) return false;
   walletConnectBusy = true;
   connectWalletBtn.disabled = true;
   const originalLabel = connectWalletBtn.textContent;
   connectWalletBtn.textContent = "CONNECTING...";
-  setWalletStatus("Confirma la conexión y el mensaje de inicio de sesión en tu wallet.");
+  setWalletStatus("Confirma el mensaje de inicio de sesión en tu wallet. No es una transacción.");
   try {
     const accounts = await provider.request({ method: "eth_accounts" });
     if (!Array.isArray(accounts) || !accounts[0]) throw new Error("La wallet no devolvió una dirección.");
+    if (String(accounts[0]).toLowerCase() !== String(window.babyCatsExpectedAddress || accounts[0]).toLowerCase()) {
+      throw new Error("La cuenta conectada no coincide con la cuenta seleccionada en Reown.");
+    }
     const { data: authData, error: authError } = await babySupabase.auth.signInWithWeb3({
       chain: "ethereum",
       statement: "Sign in to Baby Cats Mining to verify NFT ownership. No transaction or token approval is requested.",
@@ -146,8 +149,10 @@ async function connectBabyCatsWallet(provider, walletName) {
     if (!authData.session) throw new Error("No se pudo crear la sesión Web3.");
     const { data, error } = await babySupabase.functions.invoke("verify-baby-cats", { body: {} });
     if (error) throw error;
-    if (!data || data.verified !== true || !Number.isInteger(data.nftCount)) {
-      throw new Error("No se pudo confirmar la propiedad de los NFT.");
+    if (!data || data.verified !== true || !Number.isInteger(data.nftCount) ||
+        typeof data.wallet !== "string" ||
+        data.wallet.toLowerCase() !== accounts[0].toLowerCase()) {
+      throw new Error("La verificación de NFT no coincide con la wallet conectada.");
     }
     activeWalletProvider = provider;
     heroNftCountEl.textContent = String(data.nftCount);
@@ -156,39 +161,12 @@ async function connectBabyCatsWallet(provider, walletName) {
     setWalletStatus(walletName + " · " + shortAddress + " · " + data.nftCount +
       " Baby Cats verificados · " + data.pointsPerCycle + " puntos por ciclo de 8 horas.");
     connectWalletBtn.textContent = shortAddress;
-    provider.on?.("accountsChanged", () => {
-      activeWalletProvider = null;
-      connectWalletBtn.textContent = "CONECTAR WALLET";
-      heroNftCountEl.textContent = "—";
-      dashboardNftCountEl.textContent = "—";
-      setWalletStatus("La cuenta cambió. Vuelve a conectar para verificar los NFT.");
-      babySupabase.auth.signOut().catch(() => {});
-    });
     return true;
-  } catch (error) {
-    console.error("Baby Cats wallet verification failed:", error);
-    const message = error?.message || "Could not connect or verify this wallet.";
-    setWalletStatus(message);
-    connectWalletBtn.textContent = originalLabel;
-    return false;
-  } finally {
-    walletConnectBusy = false;
-    connectWalletBtn.disabled = false;
-  }
-}
-
-
-      activeWalletProvider = null;
-      connectWalletBtn.textContent = "CONECTAR WALLET";
-      heroNftCountEl.textContent = "—";
-      dashboardNftCountEl.textContent = "—";
-      setWalletStatus("Wallet desconectada.");
-      babySupabase.auth.signOut().catch(() => {});
-    });
   } catch (error) {
     console.error("Baby Cats wallet verification failed:", error);
     setWalletStatus(error?.message || "No se pudo conectar o verificar esta wallet.");
     connectWalletBtn.textContent = originalLabel;
+    return false;
   } finally {
     walletConnectBusy = false;
     connectWalletBtn.disabled = false;
@@ -200,6 +178,7 @@ window.babyCatsOnConnected = (provider, address) => {
     setWalletStatus("Reown no pudo entregar un proveedor EVM válido.");
     return false;
   }
+  window.babyCatsExpectedAddress = address;
   return connectBabyCatsWallet(provider, "Reown AppKit");
 };
 window.babyCatsOnDisconnected = () => {
