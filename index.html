@@ -114,98 +114,13 @@ if (supabaseSdk && typeof supabaseSdk.createClient === "function") {
 function setWalletStatus(message) {
   if (walletStatusEl) walletStatusEl.textContent = message;
 }
-// EIP-6963 discovery: let users choose the exact injected wallet instead of
-// relying on window.ethereum, which may point to a different extension.
-const discoveredBabyWallets = new Map();
-let walletPicker = null;
-let activeWalletProvider = null;
-let walletConnectBusy = false;
-
-function announceBabyWallet(event) {
-  const detail = event && event.detail;
-  if (!detail || !detail.info || !detail.provider || typeof detail.provider.request !== "function") return;
-  const info = detail.info;
-  const key = info.uuid || info.rdns || info.name;
-  if (!key) return;
-  discoveredBabyWallets.set(key, { info, provider: detail.provider });
-}
-
-window.addEventListener("eip6963:announceProvider", announceBabyWallet);
-window.dispatchEvent(new Event("eip6963:requestProvider"));
-
-function getBabyWalletOptions() {
-  const options = Array.from(discoveredBabyWallets.values());
-  if (!options.length && window.ethereum && typeof window.ethereum.request === "function") {
-    options.push({ info: { name: "Browser wallet", icon: "", rdns: "legacy.injected" }, provider: window.ethereum });
-  }
-  return options;
-}
-
-function closeBabyWalletPicker() {
-  if (walletPicker) {
-    walletPicker.remove();
-    walletPicker = null;
-  }
-}
-
-function chooseBabyWallet(option) {
-  closeBabyWalletPicker();
-  connectBabyCatsWallet(option.provider, option.info.name || "Wallet");
-}
-
+// Reown AppKit controls wallet discovery and connection (injected + WalletConnect).
 function showBabyWalletPicker() {
-  const options = getBabyWalletOptions();
-  if (!options.length) {
-    setWalletStatus("No se detectaron wallets EVM. Abre la página en un navegador con MetaMask, Trust Wallet u otra wallet compatible.");
-    return;
+  if (typeof window.babyCatsOpenAppKit === "function") {
+    window.babyCatsOpenAppKit();
+  } else {
+    setWalletStatus("El selector seguro de wallets todavía está cargando. Inténtalo de nuevo en unos segundos.");
   }
-  closeBabyWalletPicker();
-  const overlay = document.createElement("div");
-  overlay.setAttribute("role", "presentation");
-  overlay.style.cssText = "position:fixed;inset:0;z-index:99999;background:#050510dd;display:flex;align-items:center;justify-content:center;padding:18px";
-  const panel = document.createElement("div");
-  panel.setAttribute("role", "dialog");
-  panel.setAttribute("aria-modal", "true");
-  panel.setAttribute("aria-labelledby", "baby-wallet-title");
-  panel.style.cssText = "width:min(100%,420px);max-height:85vh;overflow:auto;background:#15132b;border:1px solid #8060ad;border-radius:18px;padding:20px;color:#fff;box-shadow:0 20px 70px #000b;font-family:inherit";
-  const title = document.createElement("h2");
-  title.id = "baby-wallet-title";
-  title.textContent = "Choose your wallet";
-  title.style.cssText = "margin:0 0 8px;font-size:21px";
-  const note = document.createElement("p");
-  note.textContent = "Select a wallet. Baby Cats only requests a sign-in message; it never asks for a transaction or token approval.";
-  note.style.cssText = "color:#c4bfdc;font-size:13px;line-height:1.5;margin:0 0 16px";
-  panel.append(title, note);
-  options.forEach(option => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.style.cssText = "width:100%;display:flex;align-items:center;gap:12px;text-align:left;margin:8px 0;padding:12px;border:1px solid #51436f;border-radius:12px;background:#211d3a;color:#fff;font:inherit;cursor:pointer";
-    if (option.info.icon && /^(https:\/\/|data:image\/)/i.test(option.info.icon)) {
-      const img = document.createElement("img");
-      img.src = option.info.icon;
-      img.alt = "";
-      img.width = 30;
-      img.height = 30;
-      img.style.cssText = "object-fit:contain;border-radius:7px";
-      button.appendChild(img);
-    }
-    const label = document.createElement("span");
-    label.textContent = option.info.name || "Wallet";
-    label.style.fontWeight = "800";
-    button.appendChild(label);
-    button.addEventListener("click", () => chooseBabyWallet(option));
-    panel.appendChild(button);
-  });
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.textContent = "Cancel";
-  cancel.style.cssText = "width:100%;padding:11px;border:0;border-radius:10px;background:#38304f;color:#fff;font:inherit;margin-top:8px";
-  cancel.addEventListener("click", closeBabyWalletPicker);
-  panel.appendChild(cancel);
-  overlay.addEventListener("click", event => { if (event.target === overlay) closeBabyWalletPicker(); });
-  overlay.appendChild(panel);
-  document.body.appendChild(overlay);
-  walletPicker = overlay;
 }
 
 async function connectBabyCatsWallet(provider, walletName) {
@@ -220,7 +135,7 @@ async function connectBabyCatsWallet(provider, walletName) {
   connectWalletBtn.textContent = "CONNECTING...";
   setWalletStatus("Confirma la conexión y el mensaje de inicio de sesión en tu wallet.");
   try {
-    const accounts = await provider.request({ method: "eth_requestAccounts" });
+    const accounts = await provider.request({ method: "eth_accounts" });
     if (!Array.isArray(accounts) || !accounts[0]) throw new Error("La wallet no devolvió una dirección.");
     const { data: authData, error: authError } = await babySupabase.auth.signInWithWeb3({
       chain: "ethereum",
@@ -277,4 +192,5 @@ if (connectWalletBtn) {
 }
 
 </script>
+<script type="module" src="/src/reown.js"></script>
 </body></html>
