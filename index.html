@@ -201,7 +201,27 @@ if (connectWalletBtn) {
         const chainHex = await provider.request({ method: "eth_chainId" });
         if (Number.parseInt(chainHex, 16) !== base.id) {
           say("Cambiando a la red Base...");
-          await appKit.switchNetwork(base);
+          try {
+            await provider.request({
+              method: "wallet_switchEthereumChain",
+              params: [{ chainId: "0x2105" }]
+            });
+          } catch (switchError) {
+            if (switchError?.code === 4902) {
+              await provider.request({
+                method: "wallet_addEthereumChain",
+                params: [{
+                  chainId: "0x2105",
+                  chainName: "Base",
+                  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+                  rpcUrls: ["https://mainnet.base.org"],
+                  blockExplorerUrls: ["https://basescan.org"]
+                }]
+              });
+            } else {
+              throw switchError;
+            }
+          }
           const confirmed = await provider.request({ method: "eth_chainId" });
           if (Number.parseInt(confirmed, 16) !== base.id) {
             throw new Error("Selecciona la red Base en tu billetera para continuar.");
