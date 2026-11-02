@@ -140,15 +140,23 @@ if (connectWalletBtn) {
   const status = document.getElementById("walletStatus");
   const say = message => { if (status) status.textContent = message; };
   try {
-    const [{ createAppKit }, { EthersAdapter }, { base }] = await Promise.all([
+    const [{ createAppKit }, { EthersAdapter }, evmNetworks] = await Promise.all([
       import("https://esm.sh/@reown/appkit@1.8.3?bundle"),
       import("https://esm.sh/@reown/appkit-adapter-ethers@1.8.3?bundle"),
       import("https://esm.sh/@reown/appkit@1.8.3/networks?bundle")
     ]);
+    const {
+      mainnet, base, polygon, arbitrum, optimism, bsc,
+      avalanche, linea, celo, gnosis, scroll, zksync
+    } = evmNetworks;
+    const supportedNetworks = [
+      mainnet, base, polygon, arbitrum, optimism, bsc,
+      avalanche, linea, celo, gnosis, scroll, zksync
+    ].filter(Boolean);
     const projectId = "f35797a6487f1faf465ec8f8c62eef10";
     const appKit = createAppKit({
       adapters: [new EthersAdapter()],
-      networks: [base],
+      networks: supportedNetworks,
       defaultNetwork: base,
       projectId,
       metadata: {
