@@ -115,6 +115,10 @@ function setWalletStatus(message) {
   if (walletStatusEl) walletStatusEl.textContent = message;
 }
 async function verifyBabyCatsWallet() {
+  if (typeof window.babyCatsConnectOkx === "function") {
+    const handled = await window.babyCatsConnectOkx();
+    if (handled) return;
+  }
   if (typeof window.babyCatsOpenAppKit === "function") {
     window.babyCatsOpenAppKit();
     return;
@@ -236,6 +240,23 @@ if (connectWalletBtn) {
         processing = false;
       }
     }
+    window.babyCatsConnectOkx = async () => {
+      const okxProvider = window.okxwallet || window.ethereum?.providers?.find?.(item => item.isOkxWallet) || null;
+      if (!okxProvider || typeof okxProvider.request !== "function") return false;
+      try {
+        say("Conectando directamente con OKX Wallet...");
+        const accounts = await okxProvider.request({ method: "eth_requestAccounts" });
+        if (!Array.isArray(accounts) || !accounts[0]) throw new Error("OKX no devolvió una dirección de billetera.");
+        provider = okxProvider;
+        account = { isConnected: true, address: accounts[0] };
+        await finishWalletConnection();
+        return true;
+      } catch (error) {
+        console.error("Baby Cats direct OKX connection error:", error);
+        say(error?.message || "No se pudo conectar directamente con OKX.");
+        return true;
+      }
+    };
     console.info("Baby Cats Reown AppKit initialized for Base.");
   } catch (error) {
     console.error("Could not initialize Reown AppKit:", error);
