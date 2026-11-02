@@ -115,6 +115,11 @@ function setWalletStatus(message) {
   if (walletStatusEl) walletStatusEl.textContent = message;
 }
 async function verifyBabyCatsWallet() {
+  if (typeof window.babyCatsOpenAppKit === "function") {
+    window.babyCatsOpenAppKit();
+    return;
+  }
+
   if (!babySupabase) {
     setWalletStatus("No se pudo cargar Supabase. Recarga la página e inténtalo de nuevo.");
     return;
@@ -227,4 +232,103 @@ window.babyCatsConnectClick = async function(event) {
   }
 };
 </script>
+
+<script type="module">
+import { createAppKit } from "https://esm.sh/@reown/appkit?bundle";
+import { EthersAdapter } from "https://esm.sh/@reown/appkit-adapter-ethers?bundle";
+import { base } from "https://esm.sh/@reown/appkit/networks?bundle";
+
+const projectId = "f35797a6487f1faf465ec8f8c62eef10";
+const metadata = {
+  name: "Baby Cats Mining",
+  description: "Connect your wallet to verify Baby Cats NFT ownership on Base.",
+  url: "https://baby-cats-mining-uwxc.vercel.app",
+  icons: [new URL("/baby-cats-logo.webp", window.location.origin).toString()]
+};
+const appKit = createAppKit({
+  adapters: [new EthersAdapter()],
+  networks: [base],
+  defaultNetwork: base,
+  projectId,
+  metadata,
+  themeMode: "dark",
+  themeVariables: {
+    "--w3m-accent": "#ffd45c",
+    "--w3m-border-radius-master": "12px"
+  },
+  features: { analytics: false, email: false, socials: [] }
+});
+
+window.babyCatsOpenAppKit = () => appKit.open();
+
+let provider = null;
+let account = null;
+let processing = false;
+appKit.subscribeProviders(state => {
+  provider = state?.eip155 || null;
+  if (!provider) processing = false;
+  finishWalletConnection();
+});
+appKit.subscribeAccount(state => {
+  account = state;
+  if (state?.isConnected && state?.address) finishWalletConnection();
+});
+appKit.subscribeNetwork(state => {
+  if (account?.isConnected && state?.chainId === base.id) finishWalletConnection();
+});
+
+async function finishWalletConnection() {
+  if (processing || !account?.isConnected || !account?.address || !provider) return;
+  processing = true;
+  const button = document.getElementById("connectWalletBtn");
+  const status = document.getElementById("walletStatus");
+  const say = message => { if (status) status.textContent = message; };
+  try {
+    const chainHex = await provider.request({ method: "eth_chainId" });
+    if (Number.parseInt(chainHex, 16) !== base.id) {
+      say("Cambiando a la red Base...");
+      await appKit.switchNetwork(base);
+      const confirmed = await provider.request({ method: "eth_chainId" });
+      if (Number.parseInt(confirmed, 16) !== base.id) {
+        throw new Error("Selecciona la red Base en tu billetera para continuar.");
+      }
+    }
+    if (!window.supabase?.createClient) throw new Error("No se pudo cargar la autenticación segura. Recarga la página.");
+    const client = window.supabase.createClient(
+      "https://sraeejufwxaefhxkwydv.supabase.co",
+      "sb_publishable_JatP5ha3cvca3n6bwsCyyQ_jyD4Qmgd"
+    );
+    say("Wallet conectada. Autoriza el inicio de sesión seguro en tu billetera...");
+    const login = await client.auth.signInWithWeb3({
+      chain: "ethereum",
+      statement: "Sign in to Baby Cats Mining to verify NFT ownership. No transaction or token approval is requested.",
+      wallet: provider
+    });
+    if (login.error) throw login.error;
+    if (!login.data?.session) throw new Error("No se pudo crear la sesión Web3.");
+    say("Sesión iniciada. Verificando tus Baby Cats en Base...");
+    const result = await client.functions.invoke("verify-baby-cats", { body: {} });
+    if (result.error) throw result.error;
+    if (result.data?.verified !== true) throw new Error("No se pudo confirmar la propiedad de los NFT.");
+    const data = result.data;
+    const short = data.wallet.slice(0,6) + "..." + data.wallet.slice(-4);
+    const hero = document.getElementById("heroNftCount");
+    const dash = document.getElementById("dashboardNftCount");
+    if (hero) hero.textContent = String(data.nftCount);
+    if (dash) dash.textContent = String(data.nftCount);
+    say(short + " · " + data.nftCount + " Baby Cats verificados · " + data.pointsPerCycle + " puntos por ciclo de 8 horas.");
+    if (button) button.textContent = short;
+  } catch (error) {
+    console.error("Baby Cats Reown connection error:", error);
+    say(error?.message || "No se pudo conectar la billetera.");
+    if (button) button.textContent = "CONECTAR WALLET";
+  } finally {
+    processing = false;
+  }
+}
+const button = document.getElementById("connectWalletBtn");
+if (button) button.onclick = null;
+console.info("Baby Cats Reown AppKit initialized.");
+</script>
+
 </body></html>
