@@ -106,6 +106,8 @@ const heroNftCountEl = document.getElementById("heroNftCount");
 const dashboardNftCountEl = document.getElementById("dashboardNftCount");
 let babySupabase = null;
 let walletConnectBusy = false;
+let activeWalletProvider = null;
+let okxListenersAttachedProvider = null;
 if (supabaseSdk && typeof supabaseSdk.createClient === "function") {
   babySupabase = supabaseSdk.createClient(BABY_SUPABASE_URL, BABY_SUPABASE_KEY);
 } else {
@@ -138,7 +140,7 @@ async function connectNativeOkx(provider) {
   setWalletStatus("OKX conectado · Red EVM " + BigInt(chainId).toString() + " · verificando Baby Cats...");
   const verified = await connectBabyCatsWallet(provider, "OKX Wallet");
   if (verified) {
-    if (typeof provider.on === "function" && !provider.__babyCatsListenersAdded) {
+    if (typeof provider.on === "function" && okxListenersAttachedProvider !== provider) {
       provider.on("chainChanged", chain => {
         if (typeof chain === "string" && /^0x[0-9a-f]+$/i.test(chain)) {
           setWalletStatus("OKX · Red EVM " + BigInt(chain).toString() + ". La verificación NFT se realiza en Base.");
@@ -152,7 +154,7 @@ async function connectNativeOkx(provider) {
         window.babyCatsExpectedAddress = accounts[0];
         void connectBabyCatsWallet(provider, "OKX Wallet");
       });
-      provider.__babyCatsListenersAdded = true;
+      okxListenersAttachedProvider = provider;
     }
   }
   return verified;
