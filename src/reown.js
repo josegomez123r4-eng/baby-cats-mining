@@ -50,7 +50,6 @@ const metadata = {
 const appKit = createAppKit({
   adapters: [new EthersAdapter()],
   networks,
-  defaultNetwork: base,
   projectId,
   metadata,
   themeMode: 'dark',
