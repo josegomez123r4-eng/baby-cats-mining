@@ -1,19 +1,55 @@
 import { createAppKit } from '@reown/appkit'
-import { base } from '@reown/appkit/networks'
+import {
+  mainnet,
+  base,
+  bsc,
+  polygon,
+  arbitrum,
+  optimism,
+  avalanche,
+  linea,
+  celo,
+  gnosis,
+  scroll,
+  zksync,
+  mantle,
+  fantom,
+  cronos
+} from '@reown/appkit/networks'
 import { EthersAdapter } from '@reown/appkit-adapter-ethers'
 
 const projectId = 'f35797a6487f1faf465ec8f8c62eef10'
 
+// Baby Cats NFT ownership is checked on Base by the backend.
+// The wallet itself may connect while using any configured EVM network.
+const networks = [
+  mainnet,
+  base,
+  bsc,
+  polygon,
+  arbitrum,
+  optimism,
+  avalanche,
+  linea,
+  celo,
+  gnosis,
+  scroll,
+  zksync,
+  mantle,
+  fantom,
+  cronos
+]
+
 const metadata = {
   name: 'Baby Cats Mining',
-  description: 'Connect your wallet to verify Baby Cats NFT ownership on Base.',
+  description: 'Connect an EVM wallet to verify Baby Cats NFT ownership on Base.',
   url: window.location.origin,
   icons: [new URL('/baby-cats-logo.webp', window.location.origin).toString()]
 }
 
 const appKit = createAppKit({
   adapters: [new EthersAdapter()],
-  networks: [base],
+  networks,
   defaultNetwork: base,
   projectId,
   metadata,
@@ -32,7 +68,6 @@ const appKit = createAppKit({
 let eip155Provider = null
 let accountState = null
 let connectingAddress = null
-let switchInProgress = false
 
 function status(message) {
   const element = document.getElementById('walletStatus')
@@ -41,30 +76,21 @@ function status(message) {
 
 async function connectSelectedAccount() {
   if (!accountState?.isConnected || !accountState?.address || !eip155Provider) return
+
   const address = accountState.address.toLowerCase()
-  if (connectingAddress === address || switchInProgress) return
+  if (connectingAddress === address) return
   connectingAddress = address
 
   try {
-    const chainHex = await eip155Provider.request({ method: 'eth_chainId' })
-    const chainId = Number.parseInt(chainHex, 16)
-
-    if (chainId !== base.id) {
-      switchInProgress = true
-      status('Cambiando la wallet a Base para verificar tus Baby Cats...')
-      await appKit.switchNetwork(base)
-      const confirmedChain = Number.parseInt(
-        await eip155Provider.request({ method: 'eth_chainId' }),
-        16
-      )
-      if (confirmedChain !== base.id) {
-        connectingAddress = null
-        status('Selecciona la red Base en tu wallet para continuar.')
-        return
-      }
+    // Do not switch the user's wallet network. NFT ownership is checked
+    // independently by the server against the Baby Cats contract on Base.
+    const accounts = await eip155Provider.request({ method: 'eth_accounts' })
+    if (!Array.isArray(accounts) || !accounts[0] ||
+        accounts[0].toLowerCase() !== address) {
+      throw new Error('La cuenta de la wallet no coincide con la seleccionada.')
     }
 
-    connectingAddress = address
+    status('Wallet conectada. Verificando tus Baby Cats en Base...')
     if (typeof window.babyCatsOnConnected === 'function') {
       const verified = await window.babyCatsOnConnected(eip155Provider, address)
       if (verified !== true) connectingAddress = null
@@ -73,8 +99,6 @@ async function connectSelectedAccount() {
     connectingAddress = null
     console.error('Reown AppKit connection error:', error)
     status(error?.message || 'No se pudo conectar con Reown AppKit.')
-  } finally {
-    switchInProgress = false
   }
 }
 
@@ -96,19 +120,17 @@ appKit.subscribeAccount(state => {
   void connectSelectedAccount()
 })
 
-appKit.subscribeNetwork(state => {
-  if (accountState?.isConnected && state?.chainId === base.id) {
-    void connectSelectedAccount()
-  }
+appKit.subscribeNetwork(() => {
+  // A network change must never trigger an automatic chain switch.
+  // Reown updates its provider; the account callback handles verification.
 })
 
 window.babyCatsOpenAppKit = () => appKit.open()
 window.babyCatsDisconnect = () => appKit.disconnect()
 
 window.addEventListener('beforeunload', () => {
-  // Do not disconnect the wallet on page close; only release local references.
   eip155Provider = null
   accountState = null
 })
 
-console.info('Baby Cats Reown AppKit initialized for Base.')
+console.info('Baby Cats Reown AppKit initialized for multiple EVM networks.')
