@@ -105,6 +105,7 @@ const walletStatusEl = document.getElementById("walletStatus");
 const heroNftCountEl = document.getElementById("heroNftCount");
 const dashboardNftCountEl = document.getElementById("dashboardNftCount");
 let babySupabase = null;
+let walletConnectBusy = false;
 if (supabaseSdk && typeof supabaseSdk.createClient === "function") {
   babySupabase = supabaseSdk.createClient(BABY_SUPABASE_URL, BABY_SUPABASE_KEY);
 } else {
