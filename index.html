@@ -106,6 +106,7 @@ const heroNftCountEl = document.getElementById("heroNftCount");
 const dashboardNftCountEl = document.getElementById("dashboardNftCount");
 let babySupabase = null;
 let walletConnectBusy = false;
+let walletRequestBusy = false;
 let activeWalletProvider = null;
 let okxListenersAttachedProvider = null;
 if (supabaseSdk && typeof supabaseSdk.createClient === "function") {
@@ -128,36 +129,59 @@ function getNativeOkxProvider() {
 }
 
 async function connectNativeOkx(provider) {
-  const accounts = await provider.request({ method: "eth_requestAccounts" });
-  if (!Array.isArray(accounts) || !accounts[0]) {
-    throw new Error("OKX no devolvió una cuenta EVM.");
+  if (walletRequestBusy || walletConnectBusy) return false;
+  walletRequestBusy = true;
+  const originalLabel = connectWalletBtn?.textContent || "CONECTAR WALLET";
+  if (connectWalletBtn) {
+    connectWalletBtn.disabled = true;
+    connectWalletBtn.textContent = "CONNECTING...";
   }
-  const chainId = await provider.request({ method: "eth_chainId" });
-  if (typeof chainId !== "string" || !/^0x[0-9a-f]+$/i.test(chainId)) {
-    throw new Error("OKX no devolvió una red EVM válida.");
-  }
-  window.babyCatsExpectedAddress = accounts[0];
-  setWalletStatus("OKX conectado · Red EVM " + BigInt(chainId).toString() + " · verificando Baby Cats...");
-  const verified = await connectBabyCatsWallet(provider, "OKX Wallet");
-  if (verified) {
-    if (typeof provider.on === "function" && okxListenersAttachedProvider !== provider) {
+  setWalletStatus("Esperando la confirmación de conexión de OKX...");
+  try {
+    const accounts = await provider.request({ method: "eth_requestAccounts" });
+    if (!Array.isArray(accounts) || !accounts[0]) {
+      throw new Error("OKX no devolvió una cuenta EVM.");
+    }
+    const chainId = await provider.request({ method: "eth_chainId" });
+    if (typeof chainId !== "string" || !/^0x[0-9a-f]+$/i.test(chainId)) {
+      throw new Error("OKX no devolvió una red EVM válida.");
+    }
+    window.babyCatsExpectedAddress = accounts[0];
+    setWalletStatus("OKX conectado · Red EVM " + BigInt(chainId).toString() + " · verificando Baby Cats...");
+    // Release the request lock immediately before handing off to the single
+    // authenticated verification flow, which has its own walletConnectBusy lock.
+    walletRequestBusy = false;
+    if (connectWalletBtn) connectWalletBtn.disabled = false;
+    const verified = await connectBabyCatsWallet(provider, "OKX Wallet");
+    if (verified && typeof provider.on === "function" && okxListenersAttachedProvider !== provider) {
       provider.on("chainChanged", chain => {
         if (typeof chain === "string" && /^0x[0-9a-f]+$/i.test(chain)) {
           setWalletStatus("OKX · Red EVM " + BigInt(chain).toString() + ". La verificación NFT se realiza en Base.");
         }
       });
-      provider.on("accountsChanged", accounts => {
-        if (!Array.isArray(accounts) || !accounts[0]) {
+      provider.on("accountsChanged", changedAccounts => {
+        if (!Array.isArray(changedAccounts) || !changedAccounts[0]) {
           window.babyCatsOnDisconnected();
           return;
         }
-        window.babyCatsExpectedAddress = accounts[0];
+        window.babyCatsExpectedAddress = changedAccounts[0];
         void connectBabyCatsWallet(provider, "OKX Wallet");
       });
       okxListenersAttachedProvider = provider;
     }
+    return verified;
+  } catch (error) {
+    console.error("Native OKX connection failed:", error);
+    setWalletStatus(error?.message || "No se pudo conectar con OKX. Inténtalo de nuevo.");
+    if (connectWalletBtn) connectWalletBtn.textContent = originalLabel;
+    return false;
+  } finally {
+    walletRequestBusy = false;
+    if (connectWalletBtn && !walletConnectBusy) {
+      connectWalletBtn.disabled = false;
+      if (connectWalletBtn.textContent === "CONNECTING...") connectWalletBtn.textContent = originalLabel;
+    }
   }
-  return verified;
 }
 
 // Reown is the fallback for wallets without a native injected provider.
@@ -239,7 +263,7 @@ window.babyCatsOnDisconnected = () => {
 if (connectWalletBtn) {
   connectWalletBtn.addEventListener("click", async event => {
     event.preventDefault();
-    if (walletConnectBusy) return;
+    if (walletConnectBusy || walletRequestBusy) return;
     const okxProvider = getNativeOkxProvider();
     if (okxProvider) {
       try {
