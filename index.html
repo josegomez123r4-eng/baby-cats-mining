@@ -129,6 +129,9 @@ window.addEventListener("eip6963:announceProvider", event => {
     if (!babyCatsInjectedProviders.some(item => item.provider === detail.provider)) {
       babyCatsInjectedProviders.push({ provider: detail.provider, rdns, name });
     }
+    if (rdns.includes("okx") || name.includes("okx")) {
+      window.__babyCatsOkxProvider = detail.provider;
+    }
   }
 });
 window.dispatchEvent(new Event("eip6963:requestProvider"));
