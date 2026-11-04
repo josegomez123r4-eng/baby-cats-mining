@@ -22,7 +22,7 @@ const projectId = 'f35797a6487f1faf465ec8f8c62eef10'
 
 // In the OKX in-app browser, use its injected EIP-1193 provider directly.
 // Do not initialize a second modal/provider that could negotiate a fixed chain list.
-const nativeOkx = window.okxwallet || window.okxwallet?.ethereum ||
+const nativeOkx = window.okxwallet || window.okxwallet?.ethereum || window.__babyCatsOkxProvider ||
   (window.ethereum?.isOkxWallet || window.ethereum?.isOKXWallet ? window.ethereum : null)
 if (nativeOkx && typeof nativeOkx.request === 'function') {
   console.info('Native OKX provider detected; skipping Reown initialization.')
