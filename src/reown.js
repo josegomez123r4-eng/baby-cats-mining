@@ -20,6 +20,14 @@ import { EthersAdapter } from '@reown/appkit-adapter-ethers'
 
 const projectId = 'f35797a6487f1faf465ec8f8c62eef10'
 
+// In the OKX in-app browser, use its injected EIP-1193 provider directly.
+// Do not initialize a second modal/provider that could negotiate a fixed chain list.
+const nativeOkx = window.okxwallet || window.okxwallet?.ethereum ||
+  (window.ethereum?.isOkxWallet || window.ethereum?.isOKXWallet ? window.ethereum : null)
+if (nativeOkx && typeof nativeOkx.request === 'function') {
+  console.info('Native OKX provider detected; skipping Reown initialization.')
+} else {
+
 // Baby Cats NFT ownership is checked on Base by the backend.
 // The wallet itself may connect while using any configured EVM network.
 const networks = [
@@ -133,3 +141,4 @@ window.addEventListener('beforeunload', () => {
 })
 
 console.info('Baby Cats Reown AppKit initialized for multiple EVM networks.')
+}
