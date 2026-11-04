@@ -118,12 +118,31 @@ if (supabaseSdk && typeof supabaseSdk.createClient === "function") {
 function setWalletStatus(message) {
   if (walletStatusEl) walletStatusEl.textContent = message;
 }
-// Prefer the native OKX EVM provider when this page is opened inside OKX.
-// This reads the wallet's active chain; it never switches or forces a network.
+// Discover injected EVM wallets without imposing a supported-chain allowlist.
+// OKX documents window.okxwallet; EIP-6963 handles wallets that announce providers.
+const babyCatsInjectedProviders = [];
+window.addEventListener("eip6963:announceProvider", event => {
+  const detail = event?.detail;
+  if (detail?.provider && typeof detail.provider.request === "function") {
+    const rdns = String(detail.info?.rdns || "").toLowerCase();
+    const name = String(detail.info?.name || "").toLowerCase();
+    if (!babyCatsInjectedProviders.some(item => item.provider === detail.provider)) {
+      babyCatsInjectedProviders.push({ provider: detail.provider, rdns, name });
+    }
+  }
+});
+window.dispatchEvent(new Event("eip6963:requestProvider"));
+
 function getNativeOkxProvider() {
+  const announced = babyCatsInjectedProviders.find(item =>
+    item.rdns.includes("okx") || item.name.includes("okx")
+  )?.provider;
   const candidates = [
     window.okxwallet,
-    window.okxwallet?.ethereum
+    window.okxwallet?.ethereum,
+    announced,
+    (window.ethereum?.isOkxWallet || window.ethereum?.isOKXWallet)
+      ? window.ethereum : null
   ];
   return candidates.find(provider => provider && typeof provider.request === "function") || null;
 }
