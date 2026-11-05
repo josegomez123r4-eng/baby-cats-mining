@@ -20,11 +20,50 @@ import { EthersAdapter } from '@reown/appkit-adapter-ethers'
 
 const projectId = 'f35797a6487f1faf465ec8f8c62eef10'
 
+// Wait briefly for EIP-6963 wallet announcements before deciding whether
+// Reown is needed. Injected providers may announce asynchronously after page load.
+function getNativeOkxProvider() {
+  const announced = window.__babyCatsOkxProvider
+  const candidates = [
+    window.okxwallet,
+    window.okxwallet?.ethereum,
+    announced,
+    (window.ethereum?.isOkxWallet || window.ethereum?.isOKXWallet) ? window.ethereum : null
+  ]
+  return candidates.find(provider => provider && typeof provider.request === 'function') || null
+}
+
+if (!getNativeOkxProvider()) {
+  await new Promise(resolve => {
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      window.removeEventListener('eip6963:announceProvider', onAnnouncement)
+      clearTimeout(timer)
+      resolve()
+    }
+    const onAnnouncement = event => {
+      const info = event?.detail?.info || {}
+      const provider = event?.detail?.provider
+      const isOkx = String(info.rdns || '').toLowerCase().includes('okx') ||
+        String(info.name || '').toLowerCase().includes('okx')
+      if (isOkx && provider && typeof provider.request === 'function') {
+        window.__babyCatsOkxProvider = provider
+        finish()
+      }
+    }
+    const timer = setTimeout(finish, 700)
+    window.addEventListener('eip6963:announceProvider', onAnnouncement)
+    window.dispatchEvent(new Event('eip6963:requestProvider'))
+    if (getNativeOkxProvider()) finish()
+  })
+}
+
 // In the OKX in-app browser, use its injected EIP-1193 provider directly.
 // Do not initialize a second modal/provider that could negotiate a fixed chain list.
-const nativeOkx = window.okxwallet || window.okxwallet?.ethereum || window.__babyCatsOkxProvider ||
-  (window.ethereum?.isOkxWallet || window.ethereum?.isOKXWallet ? window.ethereum : null)
-if (nativeOkx && typeof nativeOkx.request === 'function') {
+const nativeOkx = getNativeOkxProvider()
+if (nativeOkx) {
   console.info('Native OKX provider detected; skipping Reown initialization.')
 } else {
 
