@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#090817">
+<title>Baby Cats — Diagnóstico de wallet</title>
+<style>
+body{margin:0;padding:20px;background:#080817;color:#fff;font:15px system-ui,sans-serif}
+main{max-width:680px;margin:auto}h1{color:#ffd45c;font-size:22px}
+p{color:#c8c5df;line-height:1.5}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#111126;border:1px solid #39345f;border-radius:12px;padding:14px;color:#d9d5ff}
+button{background:#ffd45c;color:#171321;border:0;border-radius:9px;padding:12px 16px;font-weight:700;margin:8px 8px 8px 0}
+small{color:#aaa8c7}
+</style>
+</head>
+<body><main>
+<h1>Baby Cats Mining — Diagnóstico OKX</h1>
+<p>Esta prueba solo detecta proveedores de wallet disponibles en este navegador. <b>No solicita conexión, no consulta direcciones, no firma mensajes y no ejecuta transacciones.</b></p>
+<button id="refresh">Volver a revisar</button>
+<button id="copy">Copiar diagnóstico</button>
+<pre id="out">Detectando proveedores…</pre>
+<small>Abre esta página desde el navegador interno de OKX Wallet para obtener el resultado más útil.</small>
+</main>
+<script>
+(function(){
+ const found=[];
+ const safe=(p)=>!!p&&typeof p.request==="function";
+ function describe(p){
+  if(!p)return null;
+  const flags={};
+  ["isOkxWallet","isOKXWallet","isMetaMask","isTrust","isCoinbaseWallet","isBitgetWallet"].forEach(k=>{
+   try{if(k in p)flags[k]=!!p[k]}catch(e){}
+  });
+  return {hasRequest:safe(p),flags};
+ }
+ function snapshot(){
+  const w=window;
+  const candidates={
+   "window.okxwallet":describe(w.okxwallet),
+   "window.okxwallet.ethereum":describe(w.okxwallet&&w.okxwallet.ethereum),
+   "window.ethereum":describe(w.ethereum),
+   "window.ethereum.providers":Array.isArray(w.ethereum&&w.ethereum.providers)?w.ethereum.providers.map(describe):null,
+   "window.__babyCatsOkxProvider":describe(w.__babyCatsOkxProvider)
+  };
+  const data={page:location.href.split("?")[0],userAgent:navigator.userAgent,checkedAt:new Date().toISOString(),candidates,eip6963:found};
+  document.getElementById("out").textContent=JSON.stringify(data,null,2);
+  window.__babyCatsWalletDiagnostic= data;
+ }
+ window.addEventListener("eip6963:announceProvider",e=>{
+  const i=e.detail&&e.detail.info||{};
+  const p=e.detail&&e.detail.provider;
+  found.push({name:i.name||null,rdns:i.rdns||null,uuid:i.uuid||null,hasRequest:safe(p)});
+  snapshot();
+ });
+ document.getElementById("refresh").onclick=()=>{window.dispatchEvent(new Event("eip6963:requestProvider"));snapshot()};
+ document.getElementById("copy").onclick=async()=>{
+  try{await navigator.clipboard.writeText(JSON.stringify(window.__babyCatsWalletDiagnostic,null,2));document.getElementById("copy").textContent="Copiado"}catch(e){document.getElementById("copy").textContent="No se pudo copiar"}
+ };
+ snapshot();
+ window.dispatchEvent(new Event("eip6963:requestProvider"));
+ [500,1500,3500,7000].forEach(ms=>setTimeout(snapshot,ms));
+})();
+</script>
+</body></html>
